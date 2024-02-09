@@ -1,2 +1,2 @@
 # personalityGPT
-SFT on a pre-trained GPT to turn it into a chatbot with a specific personality
+SFT on a pre-trained GPT to turn it into a chatbot that sounds like Joey from the tv show Friends.
