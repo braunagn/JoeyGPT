@@ -1,8 +1,13 @@
 import config
+from pathlib import Path
+import os
 import pandas as pd
 import re
 from datasets import Dataset
 from functools import partial
+
+from transformers import AutoModelForCausalLM, AutoTokenizer
+import bitsandbytes as bnb
 
 
 def cleanup_speakers(line):
@@ -155,9 +160,9 @@ def sft_dataset__joey(pairs, tokenizer, shuffle=True):
     # After performing manual inspection, quality pairs (inputs/responses) increased
     from ~70% to ~75%
     """
-    
+
     CHAR = "joey"
-    
+
     char_data = [p for p in pairs if CHAR in p["response_speaker"].lower()]
     df = pd.DataFrame.from_records(char_data)
 
@@ -170,8 +175,7 @@ def sft_dataset__joey(pairs, tokenizer, shuffle=True):
     ]
     df.loc[:, "hasqm"] = [True if "?" in input else False for input in df.input.values]
     df.loc[:, "joey_in_line"] = [
-        True if re.search(f"(?i){CHAR}", line) else False
-        for line in df.input.values
+        True if re.search(f"(?i){CHAR}", line) else False for line in df.input.values
     ]
     df.loc[:, "is_about_acting"] = [
         True if re.search("(?i)play|audition|acting|actor", line) else False
@@ -185,7 +189,7 @@ def sft_dataset__joey(pairs, tokenizer, shuffle=True):
     print(f"filtered pairs for {CHAR}: {df.shape[0]}")
 
     dataset = Dataset.from_pandas(df).map(add_payload)
-    
+
     # map() cannot accept a func requiring multiple params, so we create a partial to pre-fix the non-batch params
     tokenize_batch_partial_func = partial(
         tokenize_batch, tokenizer=tokenizer, max_length=config.MAX_LENGTH
@@ -202,7 +206,7 @@ def sft_dataset__joey(pairs, tokenizer, shuffle=True):
             "hasqm",
             "joey_in_line",
             "is_about_acting",
-            "__index_level_0__", # added by hf datasets
+            "__index_level_0__",  # added by hf datasets
             # "payload",
         ],
     )
@@ -211,3 +215,72 @@ def sft_dataset__joey(pairs, tokenizer, shuffle=True):
     if shuffle:
         dataset = dataset.shuffle(seed=config.SEED)
     return dataset
+
+
+def initialize_model_and_tokenizer():
+    if not os.path.exists(config.SINGLE_MODEL_DIR):
+        print(
+            f"local model and tokenizer not found at {config.SINGLE_MODEL_DIR}, downloading from HF..."
+        )
+        Path(config.SINGLE_MODEL_DIR).mkdir(parents=True, exist_ok=True)
+        model = AutoModelForCausalLM.from_pretrained(
+            config.MODEL_NAME,
+            quantization_config=config.BNB_CONFIG,
+            device_map="auto",
+            # max_memory={i: f"{40960}MB" for i in range(config.N_GPUS)},
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained(config.MODEL_NAME, use_auth_token=True)
+        tokenizer.pad_token = tokenizer.eos_token  # llama tokenizer does not have a pad_token
+
+        print(f"saving model,tokenizer at: {config.SINGLE_MODEL_DIR}")
+        model.save_pretrained(config.SINGLE_MODEL_DIR)
+        tokenizer.save_pretrained(config.SINGLE_MODEL_DIR)
+    else:
+        print(f"loading model from local dir: {config.SINGLE_MODEL_DIR}")
+        model = AutoModelForCausalLM.from_pretrained(config.SINGLE_MODEL_DIR)
+        tokenizer = AutoTokenizer.from_pretrained(config.SINGLE_MODEL_DIR)
+
+    return model, tokenizer
+
+
+def print_trainable_parameters(model):
+    """
+    Prints the number of trainable parameters in the model.
+    """
+    trainable_params = 0
+    all_param = 0
+    for _, param in model.named_parameters():
+        all_param += param.numel()
+        if param.requires_grad:
+            trainable_params += param.numel()
+    print(
+        f"trainable params: {trainable_params} || all params: {all_param} || trainable %: {100 * trainable_params / all_param:0.2f}%"
+    )
+
+
+def find_all_linear_names(model, check4bit, check8bit, verbose=False):
+    """
+    Find modules to apply LoRA to.
+    :param model: PEFT model
+    """
+
+    if check4bit == check8bit:
+        raise ValueError("check4bit and check8bit cannot both have same value")
+    
+    if check4bit:
+        cls = bnb.nn.Linear4bit
+    elif check8bit:
+        cls = bnb.nn.Linear8bitLt
+
+    lora_module_names = set()
+    for name, module in model.named_modules():
+        if isinstance(module, cls):
+            names = name.split('.')
+            lora_module_names.add(names[0] if len(names) == 1 else names[-1])
+
+    if 'lm_head' in lora_module_names:
+        lora_module_names.remove('lm_head')
+    if verbose:
+        print(f"LoRA module names: {list(lora_module_names)}")
+    return list(lora_module_names)
