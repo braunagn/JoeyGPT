@@ -16,7 +16,7 @@ LINES_FILENAME = "Friends_Transcript.txt"
 # model params
 MODEL_NAME = "meta-llama/Llama-2-7b-hf"
 MODEL_NAME_NO_SLASH = MODEL_NAME.replace("/", "__")
-SINGLE_MODEL_DIR = f"{MODELS_DIR}/{MODEL_NAME_NO_SLASH}"
+SINGLE_MODEL_DIR = f"{MODELS_DIR}/{MODEL_NAME_NO_SLASH}/"
 MAX_LENGTH = 4000  # of prompt
 BNB_CONFIG = BitsAndBytesConfig(
     load_in_4bit=True,
