@@ -8,7 +8,7 @@ SEED = 42
 N_GPUS = torch.cuda.device_count()
 
 # data params
-DIR = "C:/Users/braun/OneDrive/Desktop"
+DIR = "C:/Users/braun/OneDrive/Desktop/JoeyGPT"
 LINES_FILENAME = "Friends_Transcript.txt"
 
 # model params
