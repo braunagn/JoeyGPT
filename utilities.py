@@ -149,7 +149,7 @@ def raw_dataset():
     return pairs
 
 
-def sft_dataset__joey(pairs, tokenizer, shuffle=True):
+def sft_dataset__joey(pairs, tokenizer, test_size):
     """
     Unique dataset for joey.  Prioritizes lines that:
     # 1) include "joey" in the input line
@@ -166,8 +166,6 @@ def sft_dataset__joey(pairs, tokenizer, shuffle=True):
     char_data = [p for p in pairs if CHAR in p["response_speaker"].lower()]
     df = pd.DataFrame.from_records(char_data)
 
-    print(f"total pairs for {CHAR}: {df.shape[0]}")
-
     # custom filters
     df.loc[:, "is_chandler_flag"] = [
         True if "chan" in speaker.lower() else False
@@ -181,14 +179,10 @@ def sft_dataset__joey(pairs, tokenizer, shuffle=True):
         True if re.search("(?i)play|audition|acting|actor", line) else False
         for line in df.response.values
     ]
-
     df = df[
         (df.is_chandler_flag) | (df.joey_in_line) | (df.hasqm) | (df.is_about_acting)
     ]
-
-    print(f"filtered pairs for {CHAR}: {df.shape[0]}")
-
-    dataset = Dataset.from_pandas(df).map(add_payload)
+    dataset = Dataset.from_pandas(df[["input", "response"]]).map(add_payload)
 
     # map() cannot accept a func requiring multiple params, so we create a partial to pre-fix the non-batch params
     tokenize_batch_partial_func = partial(
@@ -198,22 +192,15 @@ def sft_dataset__joey(pairs, tokenizer, shuffle=True):
     dataset = dataset.map(
         tokenize_batch_partial_func,
         remove_columns=[
-            "input_speaker",
             "input",
-            "response_speaker",
             "response",
-            "is_chandler_flag",
-            "hasqm",
-            "joey_in_line",
-            "is_about_acting",
             "__index_level_0__",  # added by hf datasets
-            # "payload",
+            "payload",
         ],
     )
 
     dataset = dataset.filter(lambda x: len(x["input_ids"]) < config.MAX_LENGTH)
-    if shuffle:
-        dataset = dataset.shuffle(seed=config.SEED)
+    dataset = dataset.train_test_split(test_size=test_size, shuffle=True, seed=config.SEED)
     return dataset
 
 
@@ -230,8 +217,9 @@ def initialize_model_and_tokenizer():
             # max_memory={i: f"{40960}MB" for i in range(config.N_GPUS)},
         )
 
-        tokenizer = AutoTokenizer.from_pretrained(config.MODEL_NAME, use_auth_token=True)
+        tokenizer = AutoTokenizer.from_pretrained(config.MODEL_NAME)
         tokenizer.pad_token = tokenizer.eos_token  # llama tokenizer does not have a pad_token
+        tokenizer.add_eos_token = True
 
         print(f"saving model,tokenizer at: {config.SINGLE_MODEL_DIR}")
         model.save_pretrained(config.SINGLE_MODEL_DIR)

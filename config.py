@@ -20,7 +20,7 @@ SINGLE_MODEL_DIR = f"{MODELS_DIR}/{MODEL_NAME_NO_SLASH}/"
 CHECKPOINTS_DIR = f"{MODELS_DIR}/checkpoints/{MODEL_NAME_NO_SLASH}"
 TELEMETRY_DIR = f"{MODELS_DIR}/telemetry/{MODEL_NAME_NO_SLASH}"
 
-MAX_LENGTH = 4000  # of prompt
+MAX_LENGTH = 400  # max allowed tokens in prompt
 BNB_CONFIG = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_use_double_quant=False,
@@ -36,8 +36,7 @@ You must answer the prompt as Joey Tribianni!!!  If you do not, your mother will
 
 ### PROMPT: {prompt}
 
-### RESPONSE: {response}
-"""
+### RESPONSE: {response}"""
 
 SPEAKER_REPLACEMENTS = [
     {
