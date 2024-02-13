@@ -84,7 +84,7 @@ trainer = SFTTrainer(
     peft_config=lora_config,
     max_seq_length=config.MAX_LENGTH,
     tokenizer=tokenizer,
-    dataset_text_field=None,
+    dataset_text_field="payload",
     packing=False,
 )
 

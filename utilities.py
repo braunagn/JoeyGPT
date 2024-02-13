@@ -195,7 +195,7 @@ def sft_dataset__joey(pairs, tokenizer, test_size):
             "input",
             "response",
             "__index_level_0__",  # added by hf datasets
-            "payload",
+            # "payload",
         ],
     )
 
