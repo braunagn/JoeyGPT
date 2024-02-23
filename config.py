@@ -14,18 +14,19 @@ MODELS_DIR = f"{DIR}/models"
 LINES_FILENAME = "Friends_Transcript.txt"
 
 # model params
-MODEL_NAME = "meta-llama/Llama-2-7b-hf"
+# MODEL_NAME = "meta-llama/Llama-2-7b-hf"
+MODEL_NAME = "mistralai/Mistral-7B-v0.1"
 MODEL_NAME_NO_SLASH = MODEL_NAME.replace("/", "__")
-SINGLE_MODEL_DIR = f"{MODELS_DIR}/{MODEL_NAME_NO_SLASH}/"
+SINGLE_MODEL_DIR = f"{MODELS_DIR}/{MODEL_NAME_NO_SLASH}"  # save unquantized model here
 CHECKPOINTS_DIR = f"{MODELS_DIR}/checkpoints/{MODEL_NAME_NO_SLASH}"
-TELEMETRY_DIR = f"{MODELS_DIR}/telemetry/{MODEL_NAME_NO_SLASH}"
 
 MAX_LENGTH = 400  # max allowed tokens in prompt
 BNB_CONFIG = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_use_double_quant=False,
-    bnb_4bit_quant_type="nf4",
-    bnb_4bit_compute_dtype=torch.bfloat16,
+    # see here for intro to parameters: https://huggingface.co/blog/4bit-transformers-bitsandbytes
+    load_in_4bit=True,  # *base* model weights loaded in 4bit precision
+    bnb_4bit_use_double_quant=False,  # double quantize; use if memory constrained (save an additional 0.4 bits per parameter)
+    bnb_4bit_quant_type="nf4",  # *base* model weights loaded in this flavor of 4 bit precision (nf4 = 4bit normal float)
+    bnb_4bit_compute_dtype=torch.bfloat16,  # precision of *base* model layers during *computation* (default is float32)
 )
 
 

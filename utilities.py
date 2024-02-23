@@ -149,7 +149,7 @@ def raw_dataset():
     return pairs
 
 
-def sft_dataset__joey(pairs, tokenizer, test_size):
+def sft_dataset__joey(pairs, tokenizer, test_size, return_df=False):
     """
     Unique dataset for joey.  Prioritizes lines that:
     # 1) include "joey" in the input line
@@ -182,6 +182,10 @@ def sft_dataset__joey(pairs, tokenizer, test_size):
     df = df[
         (df.is_chandler_flag) | (df.joey_in_line) | (df.hasqm) | (df.is_about_acting)
     ]
+
+    if return_df:
+        return df
+
     dataset = Dataset.from_pandas(df[["input", "response"]]).map(add_payload)
 
     # map() cannot accept a func requiring multiple params, so we create a partial to pre-fix the non-batch params
@@ -214,12 +218,14 @@ def initialize_model_and_tokenizer():
             config.MODEL_NAME,
             quantization_config=config.BNB_CONFIG,
             device_map="auto",
-            # max_memory={i: f"{40960}MB" for i in range(config.N_GPUS)},
         )
+        # model_mem = model.get_memory_footprint() / 1e9
+        # print(f"MODEL SIZE: {model_mem:0.2f}GB")
 
         tokenizer = AutoTokenizer.from_pretrained(config.MODEL_NAME)
-        tokenizer.pad_token = tokenizer.eos_token  # llama tokenizer does not have a pad_token
-        tokenizer.add_eos_token = True
+        tokenizer.pad_token = tokenizer.eos_token
+        # add EOS token to end of sequence:
+        tokenizer.add_eos_token = True if "llama" in config.MODEL_NAME.lower() else False
 
         print(f"saving model,tokenizer at: {config.SINGLE_MODEL_DIR}")
         model.save_pretrained(config.SINGLE_MODEL_DIR)
@@ -250,7 +256,7 @@ def print_trainable_parameters(model):
 def find_all_linear_names(model, check4bit, check8bit, verbose=False):
     """
     Find modules to apply LoRA to.
-    :param model: PEFT model
+    `model` must be PEFT model
     """
 
     if check4bit == check8bit:

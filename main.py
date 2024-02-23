@@ -2,83 +2,93 @@ import config
 from utilities import (
     raw_dataset,
     sft_dataset__joey,
-    tokenize_batch,
     initialize_model_and_tokenizer,
     find_all_linear_names,
     print_trainable_parameters,
 )
-
-from random import randrange
-
 from transformers import (
-    AutoTokenizer,
     TrainingArguments,
     DataCollatorForLanguageModeling,
-    Trainer,
 )
 from peft import (
     LoraConfig,
     get_peft_model,
     prepare_model_for_kbit_training,
-    # PeftModel,
-    # PeftConfig,
-    # AutoPeftModelForCausalLM,
 )
 from trl import SFTTrainer
 
-# tokenizer = AutoTokenizer.from_pretrained(config.MODEL_NAME)
-# tokenizer.pad_token = tokenizer.eos_token  # llama tokenizer does not have a pad_token
-# tokenizer.add_eos_token = True
 
+# def tmp():
 model, tokenizer = initialize_model_and_tokenizer()
-model.gradient_checkpointing_enable()
-model = prepare_model_for_kbit_training(model)
-target_modules = find_all_linear_names(
-    model, check4bit=True, check8bit=False, verbose=True
-)
+model = prepare_model_for_kbit_training(
+    model
+)  # https://huggingface.co/docs/peft/v0.8.2/en/package_reference/peft_model#peft.prepare_model_for_kbit_training
 
 # load Joey lines (with train/test split)
 dataset = sft_dataset__joey(raw_dataset(), tokenizer, test_size=0.2)
 
 
 ### TRAINING ###
+train_args = TrainingArguments(
+    # all params: https://huggingface.co/docs/transformers/main/en/main_classes/trainer#transformers.TrainingArguments
+    seed=config.SEED,
+    output_dir=config.CHECKPOINTS_DIR,  # output dir where preds and model checkpoints will be saved
+    #
+    per_device_train_batch_size=8,  # use in coordination with gradient_accumulation_steps to maximize GPU memory usage
+    gradient_accumulation_steps=1,  # compute gradients only after X batches/steps; enables larger batches than available GPU memory (with small increase in train time) https://huggingface.co/docs/transformers/v4.18.0/en/performance#gradient-accumulation
+    gradient_checkpointing=False,  # save a portion of forward activations (instead of all) for backward pass gradient calcs; use if memory constrained (note: training is ~20% longer).  # https://huggingface.co/docs/transformers/v4.18.0/en/performance#gradient-checkpointing
+    fp16=True,  # activations are calculated in fp16 precision; increases memory usage (model on GPU @ fp16 and fp32) but significantly speeds up computation
+    fsdp="full_shard",  # https://huggingface.co/docs/transformers/main/en/main_classes/trainer#transformers.TrainingArguments.fsdp
+    group_by_length=True,  # group similar-lengthed sequences together
+    #
+    num_train_epochs=2,
+    logging_first_step=True,
+    logging_strategy="step",
+    evaluation_strategy="step",  # assess model perf after X number of steps
+    save_strategy="steps",
+    logging_steps=int(len(dataset["train"]) * 0.1),  # logging AND eval
+    save_steps=int(len(dataset["train"]) * 0.1),
+    optim="paged_adamw_32bit",  # use "adafactor" for smaller memory footprint
+    learning_rate=1e-4,
+    lr_scheduler_type="cosine",
+    warmup_ratio=0.05,
+    # warmup_steps=int(len(dataset["train"]) * 0.05),
+    # max_steps=len(dataset["train"]) * 2,
+    report_to="wandb",
+    save_safetensors=True,
+    neftune_noise_alpha=0.1,
+    max_grad_norm=0.5,  # max grad (gradient clipping)
+    # group_by_length=True,
+)
 
 lora_config = LoraConfig(
-    r=16,
-    lora_alpha=32,
-    target_modules=target_modules,
-    lora_dropout=0.05,
+    # https://huggingface.co/docs/peft/v0.8.2/en/package_reference/lora#peft.LoraConfig
+    r=32,  # rank; number of trainable LoRA dims; max dim of adapter matrices (B and A): (d,r) * (r,k)
+    lora_alpha=32,  # scaling factor for adapter weights where scaling = alpha/rank (if alpha>rank, higher impact of LoRA weights on base model weights)
+    use_rslora=True,  # always. see https://arxiv.org/pdf/2312.03732.pdf
+    init_lora_weights="gaussian",  # if using "loftq" do not pass a quantized model (loftQ qauantizes for you); also see `loftq_config`
+    target_modules=find_all_linear_names(
+        model, check4bit=True, check8bit=False, verbose=True
+    ),
+    lora_dropout=0.1,
     bias="none",
     task_type="CAUSAL_LM",
 )
 
-train_args = TrainingArguments(
-    per_device_train_batch_size=4,
-    gradient_accumulation_steps=1,
-    fp16=True,
-    seed=config.SEED,
-    output_dir=config.CHECKPOINTS_DIR,
-    save_strategy="epoch",
-    report_to="tensorboard",
-    save_safetensors=True,
-    optim="paged_adamw_32bit",
-    learning_rate=1e-4,
-    lr_scheduler_type="cosine",
-    warmup_steps=int(len(dataset) * 0.05),
-    max_steps=len(dataset) * 1,
-    logging_steps=50,
-    neftune_noise_alpha=0.1,
-    # max_grad_norm=0.3,
-    # group_by_length=True,
-)
+if train_args.gradient_checkpointing:
+    model.gradient_checkpointing_enable()
 
-model = get_peft_model(model, lora_config)
-print_trainable_parameters(model)
+model = get_peft_model(
+    model, lora_config
+)  # https://huggingface.co/docs/peft/v0.8.2/en/package_reference/peft_model#peft.get_peft_model
+model.print_trainable_parameters()
 
 trainer = SFTTrainer(
     model=model,
     args=train_args,
-    data_collator=DataCollatorForLanguageModeling(tokenizer, mlm=False),  #DCFLM dynamically pads items in each batch
+    data_collator=DataCollatorForLanguageModeling(
+        tokenizer, mlm=False
+    ),  # DCFLM dynamically pads items in each batch
     train_dataset=dataset["train"],
     eval_dataset=dataset["test"],
     peft_config=lora_config,
@@ -98,7 +108,12 @@ trainer.save_state()
 print(metrics)
 
 
-# # Save model
-# print("Saving last checkpoint of the model...")
-# os.makedirs(OUTPUT_DIR, exist_ok = True)
-# trainer.model.save_pretrained(OUTPUT_DIR)
+# Save model
+trainer.model.peft_config["default"].base_model_name_or_path = config.MODEL_NAME
+# trainer.model.config._name_or_path = config.MODEL_NAME
+# savepath = f"{config.SINGLE_MODEL_DIR}/final_model"
+# print(f"Saving last checkpoint of the model at {savepath}")
+# Path(savepath).mkdir(parents=True, exist_ok=True)
+print("pushing model to HF...")
+trainer.model.push_to_hub("joeyGPT-Lora-v1")
+# trainer.model.save_pretrained(savepath)
