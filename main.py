@@ -18,14 +18,14 @@ from peft import (
 from trl import SFTTrainer
 
 
-# def tmp():
 model, tokenizer = initialize_model_and_tokenizer()
 model = prepare_model_for_kbit_training(
     model
 )  # https://huggingface.co/docs/peft/v0.8.2/en/package_reference/peft_model#peft.prepare_model_for_kbit_training
 
 # load Joey lines (with train/test split)
-dataset = sft_dataset__joey(raw_dataset(), tokenizer, test_size=0.2)
+# We only use the dataframe index of manually select samples (`cp_list`) to train
+dataset = sft_dataset__joey(raw_dataset(), tokenizer, test_size=0.10, cp_list=config.cp_list)
 
 
 ### TRAINING ###
@@ -34,17 +34,17 @@ train_args = TrainingArguments(
     seed=config.SEED,
     output_dir=config.CHECKPOINTS_DIR,  # output dir where preds and model checkpoints will be saved
     #
-    per_device_train_batch_size=8,  # use in coordination with gradient_accumulation_steps to maximize GPU memory usage
+    per_device_train_batch_size=4,  # use in coordination with gradient_accumulation_steps to maximize GPU memory usage
     gradient_accumulation_steps=1,  # compute gradients only after X batches/steps; enables larger batches than available GPU memory (with small increase in train time) https://huggingface.co/docs/transformers/v4.18.0/en/performance#gradient-accumulation
     gradient_checkpointing=False,  # save a portion of forward activations (instead of all) for backward pass gradient calcs; use if memory constrained (note: training is ~20% longer).  # https://huggingface.co/docs/transformers/v4.18.0/en/performance#gradient-checkpointing
     fp16=True,  # activations are calculated in fp16 precision; increases memory usage (model on GPU @ fp16 and fp32) but significantly speeds up computation
-    fsdp="full_shard",  # https://huggingface.co/docs/transformers/main/en/main_classes/trainer#transformers.TrainingArguments.fsdp
+    # fsdp="full_shard",  # distributed training only; https://huggingface.co/docs/transformers/main/en/main_classes/trainer#transformers.TrainingArguments.fsdp
     group_by_length=True,  # group similar-lengthed sequences together
     #
     num_train_epochs=2,
     logging_first_step=True,
-    logging_strategy="step",
-    evaluation_strategy="step",  # assess model perf after X number of steps
+    logging_strategy="steps",
+    evaluation_strategy="steps",  # assess model perf after X number of steps
     save_strategy="steps",
     logging_steps=int(len(dataset["train"]) * 0.1),  # logging AND eval
     save_steps=int(len(dataset["train"]) * 0.1),
@@ -54,7 +54,7 @@ train_args = TrainingArguments(
     warmup_ratio=0.05,
     # warmup_steps=int(len(dataset["train"]) * 0.05),
     # max_steps=len(dataset["train"]) * 2,
-    report_to="wandb",
+    report_to="tensorboard",
     save_safetensors=True,
     neftune_noise_alpha=0.1,
     max_grad_norm=0.5,  # max grad (gradient clipping)
@@ -115,5 +115,5 @@ trainer.model.peft_config["default"].base_model_name_or_path = config.MODEL_NAME
 # print(f"Saving last checkpoint of the model at {savepath}")
 # Path(savepath).mkdir(parents=True, exist_ok=True)
 print("pushing model to HF...")
-trainer.model.push_to_hub("joeyGPT-Lora-v1")
+trainer.model.push_to_hub("joeyGPT-sft-Lora-v1")
 # trainer.model.save_pretrained(savepath)

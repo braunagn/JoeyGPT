@@ -149,7 +149,7 @@ def raw_dataset():
     return pairs
 
 
-def sft_dataset__joey(pairs, tokenizer, test_size, return_df=False):
+def sft_dataset__joey(pairs, tokenizer, test_size, cp_list=None, return_df=False):
     """
     Unique dataset for joey.  Prioritizes lines that:
     # 1) include "joey" in the input line
@@ -182,6 +182,9 @@ def sft_dataset__joey(pairs, tokenizer, test_size, return_df=False):
     df = df[
         (df.is_chandler_flag) | (df.joey_in_line) | (df.hasqm) | (df.is_about_acting)
     ]
+
+    if cp_list is not None:
+        df = df.loc[cp_list, :]
 
     if return_df:
         return df
