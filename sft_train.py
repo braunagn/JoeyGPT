@@ -26,7 +26,7 @@ model = prepare_model_for_kbit_training(
 # load Joey lines (with train/test split)
 # We only use the dataframe index of manually select samples (`cp_list`) to train
 dataset = sft_dataset__joey(raw_dataset(), tokenizer, test_size=0.10, cp_list=config.cp_list)
-
+print('###################', len(dataset["train"]))
 
 ### TRAINING ###
 train_args = TrainingArguments(
@@ -41,7 +41,7 @@ train_args = TrainingArguments(
     # fsdp="full_shard",  # distributed training only; https://huggingface.co/docs/transformers/main/en/main_classes/trainer#transformers.TrainingArguments.fsdp
     group_by_length=True,  # group similar-lengthed sequences together
     #
-    num_train_epochs=2,
+    num_train_epochs=3,
     logging_first_step=True,
     logging_strategy="steps",
     evaluation_strategy="steps",  # assess model perf after X number of steps
@@ -63,8 +63,8 @@ train_args = TrainingArguments(
 
 lora_config = LoraConfig(
     # https://huggingface.co/docs/peft/v0.8.2/en/package_reference/lora#peft.LoraConfig
-    r=32,  # rank; number of trainable LoRA dims; max dim of adapter matrices (B and A): (d,r) * (r,k)
-    lora_alpha=32,  # scaling factor for adapter weights where scaling = alpha/rank (if alpha>rank, higher impact of LoRA weights on base model weights)
+    r=64,  # rank; number of trainable LoRA dims; max dim of adapter matrices (B and A): (d,r) * (r,k)
+    lora_alpha=64,  # scaling factor for adapter weights where scaling = alpha/rank (if alpha>rank, higher impact of LoRA weights on base model weights)
     use_rslora=True,  # always. see https://arxiv.org/pdf/2312.03732.pdf
     init_lora_weights="gaussian",  # if using "loftq" do not pass a quantized model (loftQ qauantizes for you); also see `loftq_config`
     target_modules=find_all_linear_names(
@@ -91,6 +91,7 @@ trainer = SFTTrainer(
     ),  # DCFLM dynamically pads items in each batch
     train_dataset=dataset["train"],
     eval_dataset=dataset["test"],
+    dataset_batch_size=4,
     peft_config=lora_config,
     max_seq_length=config.MAX_LENGTH,
     tokenizer=tokenizer,
@@ -110,10 +111,10 @@ print(metrics)
 
 # Save model
 trainer.model.peft_config["default"].base_model_name_or_path = config.MODEL_NAME
-# trainer.model.config._name_or_path = config.MODEL_NAME
-# savepath = f"{config.SINGLE_MODEL_DIR}/final_model"
-# print(f"Saving last checkpoint of the model at {savepath}")
-# Path(savepath).mkdir(parents=True, exist_ok=True)
-print("pushing model to HF...")
-trainer.model.push_to_hub("joeyGPT-sft-Lora-v1")
-# trainer.model.save_pretrained(savepath)
+print("pushing fine-tuned model to HF...")
+trainer.model.push_to_hub(config.SFT_MODEL_NAME)
+
+
+print("pushing MERGED fine-tuned model to HF...")
+merged_model = trainer.model.merge_and_unload()
+merged_model.push_to_hub(config.SFT_MERGED_MODEL_NAME)
