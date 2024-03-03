@@ -149,7 +149,7 @@ def raw_dataset():
     return pairs
 
 
-def sft_dataset__joey(pairs, tokenizer, test_size, cp_list=None, return_df=False):
+def sft_dataset__joey(pairs, tokenizer, test_size=None, cp_list=None, return_df=False):
     """
     Unique dataset for joey.  Prioritizes lines that:
     # 1) include "joey" in the input line
@@ -207,7 +207,8 @@ def sft_dataset__joey(pairs, tokenizer, test_size, cp_list=None, return_df=False
     )
 
     dataset = dataset.filter(lambda x: len(x["input_ids"]) < config.MAX_LENGTH)
-    dataset = dataset.train_test_split(test_size=test_size, shuffle=True, seed=config.SEED)
+    if test_size is not None:
+        dataset = dataset.train_test_split(test_size=test_size, shuffle=True, seed=config.SEED)
     return dataset
 
 

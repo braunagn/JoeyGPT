@@ -1,4 +1,5 @@
 import config
+import pickle
 import pandas as pd
 from transformers import AutoTokenizer, AutoModelForCausalLM, GenerationConfig
 import time
@@ -15,7 +16,7 @@ generation_config = GenerationConfig(
     pad_token_id=tokenizer.pad_token_id,
     eos_token_id=tokenizer.eos_token_id,
     min_new_tokens=1,  # NEW tokens generated (doesn't include prompt)
-    max_new_tokens=config.MAX_LENGTH,  # NEW tokens generated (doesn't include prompt)
+    max_new_tokens=125,  # NEW tokens generated (doesn't include prompt)
     do_sample=True,  # sample across tokens; if false, model uses greedy decoding
     temperature=1.0,  # how randomly model samples from list of available tokens
     # top_p=0.30,  # list of tokens (top X %) which model can sample from
@@ -47,34 +48,39 @@ user_inputs = [
     "When are we playing foosball next?",
     "Should I take the job?",
     "Where you going?",
-    "What's up",
+    "What's up?",
     "Do you think she likes me or you more?",
     "Come on, tell me the truth.",
     "Where's your favorite pizza place?",
-    "Come on, give me the pizza!",
+    "Come on, give me a slice of pizza!",
     "Joey, are you okay?",
     "What's the problem?",
     "What does your ideal date look like?",
     "Do you know her?",
-    "Tell me when your your next audition?",
+    "Tell me when your next audition is!",
     "Whom do you live with?",
     "Where are you from?",
 ]
-
 prompts = [config.TEMPLATE.format(prompt=i, response="") for i in user_inputs]
 
-encoding = tokenizer(prompts, return_tensors="pt", padding=True).to("cuda")
-tokenizer.batch_decode(encoding["input_ids"])
+results = []
 
+for p in prompts:
+    encoding = tokenizer(p, return_tensors="pt", padding=True).to("cuda")
+    generated_ids = model.generate(**encoding, generation_config=generation_config)
+    out = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 
-generated_ids = model.generate(**encoding, generation_config=generation_config)
-out = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+    print("\n\n")
+    print(out)
+    results.append(out)
 
 runtime = time.time() - s
 
-df = pd.DataFrame(data={"out": out})
-df.to_csv(f"{config.SINGLE_MODEL_DIR}/generated_responses__{runtime}.csv", index=False)
+with open("results", "wb") as f: # "wb" because we want to write in binary mode
+    pickle.dump(results, f)
 
-print(f"runtime: {runtime:0.1f} sec")
-print("\n######################\n")
-print("\n\n".join(out))
+df = pd.DataFrame(data={"results": results})
+savepath = f"{config.SINGLE_MODEL_DIR}/generated_responses__{runtime}.csv"
+df.to_csv(savepath, index=False, sep="Θ")
+
+print(f"Generated results saved to: {savepath}")

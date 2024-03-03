@@ -25,8 +25,8 @@ model = prepare_model_for_kbit_training(
 
 # load Joey lines (with train/test split)
 # We only use the dataframe index of manually select samples (`cp_list`) to train
-dataset = sft_dataset__joey(raw_dataset(), tokenizer, test_size=0.10, cp_list=config.cp_list)
-print('###################', len(dataset["train"]))
+dataset = sft_dataset__joey(raw_dataset(), tokenizer, test_size=0.1, cp_list=config.cp_list)
+print(dataset)
 
 ### TRAINING ###
 train_args = TrainingArguments(
@@ -34,22 +34,22 @@ train_args = TrainingArguments(
     seed=config.SEED,
     output_dir=config.CHECKPOINTS_DIR,  # output dir where preds and model checkpoints will be saved
     #
-    per_device_train_batch_size=4,  # use in coordination with gradient_accumulation_steps to maximize GPU memory usage
+    per_device_train_batch_size=2,  # use in coordination with gradient_accumulation_steps to maximize GPU memory usage
     gradient_accumulation_steps=1,  # compute gradients only after X batches/steps; enables larger batches than available GPU memory (with small increase in train time) https://huggingface.co/docs/transformers/v4.18.0/en/performance#gradient-accumulation
     gradient_checkpointing=False,  # save a portion of forward activations (instead of all) for backward pass gradient calcs; use if memory constrained (note: training is ~20% longer).  # https://huggingface.co/docs/transformers/v4.18.0/en/performance#gradient-checkpointing
     fp16=True,  # activations are calculated in fp16 precision; increases memory usage (model on GPU @ fp16 and fp32) but significantly speeds up computation
     # fsdp="full_shard",  # distributed training only; https://huggingface.co/docs/transformers/main/en/main_classes/trainer#transformers.TrainingArguments.fsdp
     group_by_length=True,  # group similar-lengthed sequences together
     #
-    num_train_epochs=3,
+    num_train_epochs=1,
     logging_first_step=True,
     logging_strategy="steps",
     evaluation_strategy="steps",  # assess model perf after X number of steps
     save_strategy="steps",
-    logging_steps=int(len(dataset["train"]) * 0.1),  # logging AND eval
-    save_steps=int(len(dataset["train"]) * 0.1),
+    logging_steps=5,  # logging AND eval
+    # save_steps=100,
     optim="paged_adamw_32bit",  # use "adafactor" for smaller memory footprint
-    learning_rate=1e-4,
+    learning_rate=5e-5,
     lr_scheduler_type="cosine",
     warmup_ratio=0.05,
     # warmup_steps=int(len(dataset["train"]) * 0.05),
@@ -89,9 +89,9 @@ trainer = SFTTrainer(
     data_collator=DataCollatorForLanguageModeling(
         tokenizer, mlm=False
     ),  # DCFLM dynamically pads items in each batch
-    train_dataset=dataset["train"],
-    eval_dataset=dataset["test"],
-    dataset_batch_size=4,
+    train_dataset=dataset["train"] if "train" in dataset else dataset,
+    eval_dataset=dataset["test"] if "test" in dataset else None,
+    # dataset_batch_size=1,
     peft_config=lora_config,
     max_seq_length=config.MAX_LENGTH,
     tokenizer=tokenizer,
@@ -100,6 +100,9 @@ trainer = SFTTrainer(
 )
 
 model.config.use_cache = False  # silence the warnings. Please re-enable for inference!
+
+# print(train_args)
+# print(lora_config)
 
 train_result = trainer.train()
 metrics = train_result.metrics
