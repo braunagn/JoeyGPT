@@ -26,7 +26,7 @@ model = prepare_model_for_kbit_training(
 # load Joey lines (with train/test split)
 # We only use the dataframe index of manually select samples (`cp_list`) to train
 dataset = sft_dataset__joey(raw_dataset(), tokenizer, test_size=0.1, cp_list=config.cp_list)
-print(dataset)
+
 
 ### TRAINING ###
 train_args = TrainingArguments(

@@ -282,3 +282,38 @@ def find_all_linear_names(model, check4bit, check8bit, verbose=False):
     if verbose:
         print(f"LoRA module names: {list(lora_module_names)}")
     return list(lora_module_names)
+
+
+def rt_augment_dataset(df):
+    l = []
+    extra_strings = ["\n\n### RESPONSE:", "\n\n### PROMPT:", "\n\n### INSTRUCTION:", "\n"]
+    for es in extra_strings:
+        tmp = df.copy(deep=True)
+        tmp.loc[:, "bad"] = tmp.good.map(lambda x: x + es)
+        l.append(tmp)
+
+    return pd.concat(l).reset_index(drop=True)
+
+def get_response(s):
+    key = "### RESPONSE:"
+    idx = s.find(key)
+    return s[idx+len(key):].strip(" ")
+
+
+def rt_preprocess_function(tokenizer, examples):
+    new_examples = {
+        "input_ids_chosen": [],
+        "attention_mask_chosen": [],
+        "input_ids_rejected": [],
+        "attention_mask_rejected": [],
+    }
+    for chosen, rejected in zip(examples["good"], examples["bad"]):
+        tokenized_chosen = tokenizer(chosen)
+        tokenized_rejected = tokenizer(rejected)
+
+        new_examples["input_ids_chosen"].append(tokenized_chosen["input_ids"])
+        new_examples["attention_mask_chosen"].append(tokenized_chosen["attention_mask"])
+        new_examples["input_ids_rejected"].append(tokenized_rejected["input_ids"])
+        new_examples["attention_mask_rejected"].append(tokenized_rejected["attention_mask"])
+
+    return new_examples

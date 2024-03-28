@@ -37,7 +37,6 @@ generation_config = GenerationConfig(
     use_cache=False,  # whether to re-use last passed key/value attentions
 )
 
-
 user_inputs = [
     "So, how was the date?",
     "Where are you going?",
@@ -61,6 +60,7 @@ user_inputs = [
     "Whom do you live with?",
     "Where are you from?",
 ]
+
 prompts = [config.TEMPLATE.format(prompt=i, response="") for i in user_inputs]
 
 results = []

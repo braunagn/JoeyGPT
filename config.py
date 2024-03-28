@@ -12,6 +12,7 @@ N_GPUS = torch.cuda.device_count()
 DIR = "."
 MODELS_DIR = f"{DIR}/models"
 LINES_FILENAME = "Friends_Transcript.txt"
+REWARD_MODEL_TRAINING_DATASET_FILENAME = "rm_train_dataset.csv"
 
 # model params
 # MODEL_NAME = "meta-llama/Llama-2-7b-hf"
@@ -24,7 +25,8 @@ CHECKPOINTS_DIR = f"{MODELS_DIR}/checkpoints/{MODEL_NAME_NO_SLASH}"
 USER = "braunagn"
 SFT_MODEL_NAME = "joeyGPT-sft-LoRA-v1"
 SFT_MERGED_MODEL_NAME = "joeyGPT-sft-merged-v1"
-REWARD_MODEL_NAME = ""
+REWARD_MODEL_NAME = "joeyGPT-reward-Lora-v1"
+REWARD_MERGED_MODEL_NAME = "joeyGPT-reward-merged-v1"
 
 MAX_LENGTH = 400  # max allowed tokens in prompt
 BNB_CONFIG = BitsAndBytesConfig(
@@ -246,7 +248,7 @@ SPEAKER_REPLACEMENTS = [
     },
 ]
 
-# index of cherry-picked dialogue to use for joey
+# index of cherry-picked dialogue to use for sft training
 cp_list = [
     2465,
     1131,
