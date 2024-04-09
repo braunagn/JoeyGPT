@@ -27,6 +27,7 @@ SFT_MODEL_NAME = "joeyGPT-sft-LoRA-v1"
 SFT_MERGED_MODEL_NAME = "joeyGPT-sft-merged-v1"
 REWARD_MODEL_NAME = "joeyGPT-reward-Lora-v1"
 REWARD_MERGED_MODEL_NAME = "joeyGPT-reward-merged-v1"
+PPO_MODEL_NAME = "joeyGPT-v1"
 
 MAX_LENGTH = 400  # max allowed tokens in prompt
 BNB_CONFIG = BitsAndBytesConfig(
